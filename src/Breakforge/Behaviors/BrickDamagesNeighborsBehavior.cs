@@ -1,6 +1,7 @@
 using System;
 using Microsoft.Xna.Framework;
 using Breakforge.Core;
+using Breakforge.Gameplay;
 
 namespace Breakforge.Behaviors;
 
@@ -47,10 +48,7 @@ public sealed class BrickDamagesNeighborsBehavior : IBehavior
                 if (ReferenceEquals(other, _self) || !other.IsAlive) continue;
                 var pos = other.Get<Transform>().Position;
                 if (Vector2.DistanceSquared(pos, origin) > Radius * Radius) continue;
-                var h = other.TryGet<Health>();
-                if (h is null || h.Invulnerable) continue;
-                h.Current -= Damage;
-                _world.Bus.Publish(new BrickDamagedEvent(other, Damage, _self));
+                DamageResolver.HitBrickArea(_world, _self, other, Damage);
                 if (++hits >= MaxTargets) break;
             }
         }

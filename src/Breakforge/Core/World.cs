@@ -23,6 +23,12 @@ public sealed class World
     public Microsoft.Xna.Framework.Rectangle PlayField { get; set; }
     public EffectStack GlobalEffects { get; } = new();
 
+    /// <summary>Skill-driven stats for this run. Replaced by PlayScene at level start.</summary>
+    public PlayerStats Stats { get; set; } = new();
+
+    /// <summary>Mutable per-level state: gold, gems, regen accumulator, etc.</summary>
+    public RunState Run { get; set; } = new();
+
     private readonly List<Entity> _spawnQueue = new();
 
     public Entity Spawn(Entity e)

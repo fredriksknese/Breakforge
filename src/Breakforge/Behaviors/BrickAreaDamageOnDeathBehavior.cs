@@ -37,7 +37,8 @@ public sealed class BrickAreaDamageOnDeathBehavior : IBehavior
         if (_self is null || _world is null) return;
         if (!ReferenceEquals(e.Brick, _self)) return;
         var pos = _self.Get<Transform>().Position;
-        Spawning.SpawnFx(_world, pos, new Color(255, 140, 60), Radius, 0.35f);
-        _world.Bus.Publish(new AreaDamageEvent(pos, Radius, Damage, _self));
+        float r = Radius * _world.Stats.AreaMultiplier;
+        Spawning.SpawnFx(_world, pos, new Color(255, 140, 60), r, 0.35f);
+        _world.Bus.Publish(new AreaDamageEvent(pos, r, Damage, _self));
     }
 }

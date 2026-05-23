@@ -1,0 +1,29 @@
+{
+  "id": "cascade.1",
+  "displayName": "Resonance",
+  "order": 1,
+  "map": {
+    "id": "map.cascade",
+    "displayName": "Cascade Halls",
+    "subtitle": "Chain reactions galore"
+  },
+  "legend": {
+    "B": "basic.blue",
+    "G": "basic.green",
+    "P": "basic.purple",
+    "A": "chain.amber",
+    "M": "mover.cyan",
+    "X": "bomb.red",
+    "#": "wall.gray",
+    ".": ""
+  },
+  "backgroundColor": [20, 14, 30],
+  "rows": [
+    "##########",
+    "#PPPPPPPP#",
+    "#AAGGGGAA#",
+    "#..MMMM..#",
+    "#GG.XX.GG#",
+    "#BBBBBBBB#"
+  ]
+}

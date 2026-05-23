@@ -1,6 +1,7 @@
 using System;
 using Microsoft.Xna.Framework;
 using Breakforge.Core;
+using Breakforge.Gameplay;
 
 namespace Breakforge.Systems;
 
@@ -66,6 +67,17 @@ public sealed class CollisionSystem : ISystem
             }
             else if (bt.Position.Y - bc.Radius > field.Bottom)
             {
+                // Ball shield: spend a charge instead of dying.
+                var ballShield = ball.TryGet<Shield>();
+                if (ballShield is not null && ballShield.Charges > 0)
+                {
+                    ballShield.Charges -= 1;
+                    ballShield.HitFlash = 0.25f;
+                    bt.Position.Y = field.Bottom - bc.Radius - 1f;
+                    bv.Value.Y = -MathF.Abs(bv.Value.Y);
+                    world.Bus.Publish(new ShieldConsumedEvent(ball));
+                    continue;
+                }
                 // Lost ball
                 ball.Kill();
                 world.Bus.Publish(new BallLostEvent(ball));
@@ -98,17 +110,7 @@ public sealed class CollisionSystem : ISystem
                     if (normal.X != 0) bv.Value.X = -bv.Value.X;
                     if (normal.Y != 0) bv.Value.Y = -bv.Value.Y;
 
-                    var h = brick.TryGet<Health>();
-                    if (h is not null && !h.Invulnerable)
-                    {
-                        h.Current -= 1;
-                        world.Bus.Publish(new BrickDamagedEvent(brick, 1, ball));
-                        if (h.Current <= 0)
-                        {
-                            brick.Kill();
-                            world.Bus.Publish(new BrickDestroyedEvent(brick, ball));
-                        }
-                    }
+                    DamageResolver.HitBrick(world, ball, brick);
                     world.Bus.Publish(new BallHitBrickEvent(ball, brick, normal));
                     break; // one brick per ball per frame keeps physics stable
                 }
@@ -135,20 +137,13 @@ public sealed class CollisionSystem : ISystem
     private void OnAreaDamage(AreaDamageEvent e)
     {
         if (_world is null) return;
+        float r2 = e.Radius * e.Radius;
         foreach (var brick in _world.WithKind(EntityKind.Brick))
         {
             if (!brick.IsAlive) continue;
             var pos = brick.Get<Transform>().Position;
-            if (Vector2.DistanceSquared(pos, e.Center) > e.Radius * e.Radius) continue;
-            var h = brick.TryGet<Health>();
-            if (h is null || h.Invulnerable) continue;
-            h.Current -= e.Amount;
-            _world.Bus.Publish(new BrickDamagedEvent(brick, e.Amount, e.Source));
-            if (h.Current <= 0)
-            {
-                brick.Kill();
-                _world.Bus.Publish(new BrickDestroyedEvent(brick, e.Source));
-            }
+            if (Vector2.DistanceSquared(pos, e.Center) > r2) continue;
+            DamageResolver.HitBrickArea(_world, e.Source, brick, e.Amount);
         }
     }
 

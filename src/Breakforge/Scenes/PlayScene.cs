@@ -59,46 +59,45 @@ public sealed class PlayScene : IScene
         _world.Systems.Add(cleanup);
         _collision.Attach(_world);
 
-        // Run context: gather skill modifiers.
-        var ctxRun = new RunContext
-        {
-            World = _world,
-            Profile = ctx.Profile,
-            Paddle = null!, // set below after paddle exists
-        };
-
         // Paddle
         var paddleBaseSize = new Vector2(110f, 14f);
         _paddle = Spawning.SpawnPaddle(
             _world,
             new Vector2(playfield.Center.X, playfield.Bottom - 40),
             paddleBaseSize);
-        ctxRun = new RunContext { World = _world, Profile = ctx.Profile, Paddle = _paddle };
 
+        // Run context: gather skill modifiers.
+        var stats = new PlayerStats();
+        var ctxRun = new RunContext { World = _world, Profile = ctx.Profile, Paddle = _paddle, Stats = stats };
         foreach (var skillId in ctx.Profile.Skills.Unlocked)
         {
             if (ctx.Registry.Skills.TryGetValue(skillId, out var node))
                 node.OnLevelStart?.Invoke(ctxRun);
         }
+        _world.Stats = stats;
+        _world.Run = new RunState();
 
-        // Apply paddle width multiplier from skills.
-        _paddle.Get<Transform>().Size.X *= ctxRun.PaddleWidthMultiplier;
+        // Apply paddle width + speed multipliers from skills.
+        _paddle.Get<Transform>().Size.X *= stats.PaddleWidthMultiplier;
+        _paddle.Get<Velocity>().MaxSpeed *= stats.PaddleSpeedMultiplier;
+        if (stats.StartingShields > 0)
+            _paddle.Add(new Shield { Charges = stats.StartingShields });
 
         // Ball + extras from skill BonusStartingBalls.
         var firstBall = Spawning.SpawnStuckBall(_world, _paddle, Spawning.DefaultBallRadius);
         var launch = firstBall.FindBehavior<Behaviors.BallLaunchBehavior>();
-        if (launch is not null && ctxRun.BallSpeedMultiplier != 1f)
+        if (launch is not null && stats.BallSpeedMultiplier != 1f)
         {
             // Replace launch with a scaled one.
             firstBall.RemoveBehavior(launch);
             firstBall.AddBehavior(new Behaviors.BallLaunchBehavior
             {
                 Paddle = _paddle,
-                LaunchSpeed = Spawning.DefaultBallSpeed * ctxRun.BallSpeedMultiplier,
+                LaunchSpeed = Spawning.DefaultBallSpeed * stats.BallSpeedMultiplier,
             });
         }
         // BonusStartingBalls: spawn them stacked, ready to launch.
-        for (int i = 0; i < ctxRun.BonusStartingBalls; i++)
+        for (int i = 0; i < stats.BonusStartingBalls; i++)
             Spawning.SpawnStuckBall(_world, _paddle, Spawning.DefaultBallRadius);
 
         // Bricks
@@ -109,8 +108,14 @@ public sealed class PlayScene : IScene
         _subs.Add(_world.Bus.Subscribe<BrickDestroyedEvent>(e => OnBrickDestroyed(ctx, e)));
         _subs.Add(_world.Bus.Subscribe<PowerupCollectedEvent>(e => OnPowerupCollected(ctx, e)));
         _subs.Add(_world.Bus.Subscribe<BallLostEvent>(e => OnBallLost(ctx, e)));
+        _subs.Add(_world.Bus.Subscribe<BrickCritEvent>(e => OnCrit(e)));
+        _subs.Add(_world.Bus.Subscribe<GoldGainedEvent>(_ => { /* counter live in world.Run.Gold */ }));
+        _subs.Add(_world.Bus.Subscribe<GemDroppedEvent>(e => OnGemDropped(ctx, e)));
+        _subs.Add(_world.Bus.Subscribe<LifeStolenEvent>(_ => GainLife("LIFE STEAL!")));
+        _subs.Add(_world.Bus.Subscribe<ShieldConsumedEvent>(_ => { _flash = 0.8f; ShowBanner("SHIELD!", 0.6f); }));
 
         ShowBanner("LEVEL " + (_levelIndex + 1) + " - " + level.DisplayName, 2.0f);
+        UpdateLastStand();
     }
 
     private void SpawnLevelBricks(Registry reg, LevelDef level)
@@ -189,10 +194,11 @@ public sealed class PlayScene : IScene
             BuildLevel(ctx);
             return this;
         }
-        // Map cleared
+        // Map cleared — bank gold/gems into lifetime score.
         if (_map.CompletionReward is { } reward)
             ctx.Profile.Inventory.Add(reward);
         ctx.Profile.SkillPoints += 1;
+        ctx.Profile.LifetimeScore += _world.Run.Gold + _world.Run.Gems * 50;
         return new MainMenuScene();
     }
 
@@ -238,7 +244,20 @@ public sealed class PlayScene : IScene
         foreach (var b in _world.WithKind(EntityKind.Ball)) { anyBall = true; break; }
         if (anyBall) return;
 
+        // Paddle shield: spend a charge instead of a life.
+        var paddleShield = _paddle.TryGet<Shield>();
+        if (paddleShield is not null && paddleShield.Charges > 0)
+        {
+            paddleShield.Charges -= 1;
+            paddleShield.HitFlash = 0.5f;
+            _flash = 1f;
+            ShowBanner("SHIELD ABSORB", 0.8f);
+            Spawning.SpawnStuckBall(_world, _paddle, Spawning.DefaultBallRadius);
+            return;
+        }
+
         _lives -= 1;
+        UpdateLastStand();
         if (_lives <= 0)
         {
             ShowBanner("GAME OVER", 1.5f);
@@ -246,6 +265,52 @@ public sealed class PlayScene : IScene
             return;
         }
         Spawning.SpawnStuckBall(_world, _paddle, Spawning.DefaultBallRadius);
+    }
+
+    private void OnCrit(BrickCritEvent e)
+    {
+        _flash = 0.4f;
+        Spawning.SpawnFx(_world, e.Brick.Get<Transform>().Position, Color.Gold, 22f, 0.16f);
+    }
+
+    private void OnGemDropped(SceneContext ctx, GemDroppedEvent e)
+    {
+        _score += e.Value;
+        ctx.Profile.LifetimeScore += e.Value;
+        Spawning.SpawnFx(_world, e.Brick.Get<Transform>().Position, new Color(140, 240, 200), 16f, 0.4f);
+    }
+
+    private void GainLife(string banner)
+    {
+        _lives += 1;
+        ShowBanner(banner, 0.8f);
+        UpdateLastStand();
+    }
+
+    private void UpdateLastStand()
+    {
+        if (_world is null) return;
+        bool wasActive = _world.Run.LastStandActive;
+        _world.Run.LastStandActive = _lives == 1 && _world.Stats.LastStandMultiplier > 1f;
+        if (_world.Run.LastStandActive && !wasActive) ShowBanner("LAST STAND!", 1.2f);
+    }
+
+    private void TickRunSystems(float dt)
+    {
+        // Health regeneration: accumulate per-second value; spend whole points.
+        var stats = _world.Stats;
+        if (stats.HealthRegenPerSecond > 0f)
+        {
+            float speed = stats.HealthRegenPerSecond * (1f + stats.CooldownReduction);
+            _world.Run.HealthRegenAccumulator += speed * dt;
+            if (_world.Run.HealthRegenAccumulator >= 1f)
+            {
+                int gain = (int)_world.Run.HealthRegenAccumulator;
+                _world.Run.HealthRegenAccumulator -= gain;
+                _lives += gain;
+                UpdateLastStand();
+            }
+        }
     }
 
     private void ShowBanner(string text, float seconds)
@@ -258,6 +323,7 @@ public sealed class PlayScene : IScene
     {
         float dt = (float)gt.ElapsedGameTime.TotalSeconds;
         _world.Update(dt);
+        TickRunSystems(dt);
         if (_bannerTimer > 0) _bannerTimer -= dt;
         if (_flash > 0) _flash -= dt * 4f;
 
@@ -288,7 +354,30 @@ public sealed class PlayScene : IScene
     private void DrawHud(SpriteBatch sb, Rectangle vb, LevelDef level)
     {
         PixelFont.Draw(sb, "SCORE " + _score, new Vector2(vb.Left + 24, vb.Top + 16), Color.White, 3);
-        PixelFont.Draw(sb, "LIVES " + _lives, new Vector2(vb.Right - 200, vb.Top + 16), Color.White, 3);
+
+        var livesColor = _world.Run.LastStandActive ? Color.OrangeRed : Color.White;
+        PixelFont.Draw(sb, "LIVES " + _lives, new Vector2(vb.Right - 200, vb.Top + 16), livesColor, 3);
+
+        // Shields / gold / gems on a secondary row.
+        var paddleShield = _paddle.TryGet<Shield>();
+        int x2 = vb.Right - 200;
+        int y2 = vb.Top + 48;
+        if (paddleShield is not null && paddleShield.Charges > 0)
+        {
+            string s = "SHIELD " + paddleShield.Charges;
+            PixelFont.Draw(sb, s, new Vector2(x2, y2), new Color(140, 200, 255), 2);
+            y2 += 14;
+        }
+        if (_world.Run.Gold > 0)
+        {
+            PixelFont.Draw(sb, "GOLD " + _world.Run.Gold, new Vector2(x2, y2), new Color(255, 220, 120), 2);
+            y2 += 14;
+        }
+        if (_world.Run.Gems > 0)
+        {
+            PixelFont.Draw(sb, "GEMS " + _world.Run.Gems, new Vector2(x2, y2), new Color(140, 240, 200), 2);
+        }
+
         PixelFont.Draw(sb, level.DisplayName.ToUpper(),
             new Vector2(vb.Center.X - PixelFont.MeasureWidth(level.DisplayName.ToUpper(), 2) / 2, vb.Top + 22), new Color(180, 180, 200), 2);
 

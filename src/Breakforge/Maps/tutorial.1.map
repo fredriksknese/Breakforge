@@ -1,0 +1,21 @@
+{
+  "id": "tutorial.1",
+  "displayName": "First Strike",
+  "order": 1,
+  "map": {
+    "id": "map.tutorial",
+    "displayName": "Training Grounds",
+    "subtitle": "Learn the basics"
+  },
+  "legend": {
+    "B": "basic.blue",
+    "G": "basic.green",
+    ".": ""
+  },
+  "rows": [
+    "BBBBBBBBBB",
+    "BGGGGGGGGB",
+    "BG......GB",
+    "BBBBBBBBBB"
+  ]
+}

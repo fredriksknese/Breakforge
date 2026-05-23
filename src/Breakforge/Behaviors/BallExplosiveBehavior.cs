@@ -39,7 +39,8 @@ public sealed class BallExplosiveBehavior : IBehavior
         if (_self is null || _world is null) return;
         if (!ReferenceEquals(e.Ball, _self)) return;
         var pos = e.Brick.Get<Transform>().Position;
-        Spawning.SpawnFx(_world, pos, Color.OrangeRed, Radius, 0.25f);
-        _world.Bus.Publish(new AreaDamageEvent(pos, Radius, Damage, _self));
+        float r = Radius * _world.Stats.AreaMultiplier;
+        Spawning.SpawnFx(_world, pos, Color.OrangeRed, r, 0.25f);
+        _world.Bus.Publish(new AreaDamageEvent(pos, r, Damage, _self));
     }
 }

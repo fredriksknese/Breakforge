@@ -26,7 +26,8 @@ public static class BrickCatalog
         {
             Id = "basic.green",
             DisplayName = "Tough Brick",
-            Hp = 2, ScoreValue = 25,
+            Hp = 2, Armor = 1, BrickType = "Tough",
+            ScoreValue = 25,
             Color = new Color(90, 170, 110),
             OutlineColor = new Color(40, 100, 50),
             PowerupDropChance = 0.10f,
@@ -37,7 +38,8 @@ public static class BrickCatalog
         {
             Id = "basic.purple",
             DisplayName = "Hardened Brick",
-            Hp = 3, ScoreValue = 50,
+            Hp = 3, Armor = 2, BrickType = "Armored",
+            ScoreValue = 50,
             Color = new Color(140, 90, 200),
             OutlineColor = new Color(80, 50, 120),
             PowerupDropChance = 0.15f,
@@ -58,7 +60,7 @@ public static class BrickCatalog
         {
             Id = "bomb.red",
             DisplayName = "Bomb",
-            Hp = 1,
+            Hp = 1, BrickType = "Explosive",
             Color = new Color(220, 70, 70),
             OutlineColor = new Color(255, 200, 200),
             ScoreValue = 30,
@@ -88,7 +90,7 @@ public static class BrickCatalog
         {
             Id = "mover.cyan",
             DisplayName = "Drifter",
-            Hp = 1,
+            Hp = 1, BrickType = "Drifter",
             Color = new Color(80, 200, 220),
             OutlineColor = new Color(160, 240, 255),
             ScoreValue = 20,

@@ -52,8 +52,10 @@ public static class Spawning
         e.Add(new Transform { Position = position, Size = def.Size });
         e.Add(new BoxCollider());
         e.Add(new SpriteRenderer { Color = def.Color, OutlineColor = def.OutlineColor, Layer = 3 });
-        e.Add(new Health { Max = def.Hp, Current = def.Hp, Invulnerable = def.Indestructible });
+        e.Add(new Health { Max = def.Hp, Current = def.Hp, Armor = def.Armor, Invulnerable = def.Indestructible });
         e.Add(new DefRef { DefId = def.Id });
+        e.Add(new BrickStatus());
+        e.AddBehavior(new Behaviors.BrickStatusBehavior());
         foreach (var factory in def.BehaviorFactories) e.AddBehavior(factory());
         world.Spawn(e);
         return e;

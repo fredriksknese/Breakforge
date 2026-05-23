@@ -1,0 +1,23 @@
+{
+  "id": "tutorial.2",
+  "displayName": "Bombs Away",
+  "order": 2,
+  "map": {
+    "id": "map.tutorial",
+    "displayName": "Training Grounds",
+    "subtitle": "Learn the basics"
+  },
+  "legend": {
+    "B": "basic.blue",
+    "#": "wall.gray",
+    "X": "bomb.red",
+    ".": ""
+  },
+  "rows": [
+    "##########",
+    "#BBBBBBBB#",
+    "#B..XX..B#",
+    "#BBBBBBBB#",
+    ".........."
+  ]
+}

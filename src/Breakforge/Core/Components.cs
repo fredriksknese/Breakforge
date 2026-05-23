@@ -46,8 +46,36 @@ public sealed class Health : IComponent
 {
     public int Max = 1;
     public int Current = 1;
+    public int Armor;          // flat damage soaked per hit (reduced by ArmorPen)
     public bool Invulnerable;
     public bool IsDead => Current <= 0;
+    public bool FirstHitTaken; // for first-strike multiplier accounting
+}
+
+/// <summary>
+/// Status timers/values applied to a brick by skill interactions. Ticked by
+/// BrickStatusBehavior. Attached automatically when bricks spawn.
+/// </summary>
+public sealed class BrickStatus : IComponent
+{
+    public float StunRemaining;
+    public float SlowFactor = 1f;     // 1.0 = normal, &lt;1 slows movement
+    public float SlowRemaining;
+    public float BurnRemaining;
+    public float BurnDps;
+    public Vector2 KnockOffset;       // visual nudge, decays over time
+
+    public bool IsStunned => StunRemaining > 0f;
+}
+
+/// <summary>
+/// Shield charges. On the paddle: absorbs a lost ball. On a ball: lets the
+/// ball survive one wall-bottom exit by reflecting up instead.
+/// </summary>
+public sealed class Shield : IComponent
+{
+    public int Charges;
+    public float HitFlash;            // visual flash time after consuming a charge
 }
 
 public sealed class Lifetime : IComponent

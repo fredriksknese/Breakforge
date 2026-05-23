@@ -4,7 +4,7 @@ using Breakforge.Core;
 
 namespace Breakforge.Definitions;
 
-public enum SkillCategory { Paddle, Ball, Brick, Map, Economy }
+public enum SkillCategory { Paddle, Ball, Brick, Map, Economy, Offense, Defense, Element, Status }
 
 /// <summary>
 /// A skill tree node. Each node has prerequisites and an OnUnlock hook that
@@ -30,7 +30,6 @@ public sealed class RunContext
     public required World World { get; init; }
     public required Entity Paddle { get; init; }
     public required Player.PlayerProfile Profile { get; init; }
-    public float BallSpeedMultiplier { get; set; } = 1f;
-    public float PaddleWidthMultiplier { get; set; } = 1f;
-    public int BonusStartingBalls { get; set; }
+    /// <summary>All stat modifiers go through here. Skills mutate fields directly.</summary>
+    public PlayerStats Stats { get; init; } = new();
 }

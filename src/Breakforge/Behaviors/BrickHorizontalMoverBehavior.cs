@@ -20,7 +20,19 @@ public sealed class BrickHorizontalMoverBehavior : IBehavior
     {
         var t = self.Get<Transform>();
         if (!_initialized) { _origin = t.Position; _initialized = true; }
-        _phase += dt * (Speed / System.Math.Max(1f, HalfRange));
+
+        // Status: stun freezes movement, slow scales the phase advance.
+        var status = self.TryGet<BrickStatus>();
+        float effective = dt;
+        if (status is not null)
+        {
+            if (status.IsStunned) return;
+            effective *= status.SlowFactor;
+        }
+        // Global slow from skills (e.g. Glacial Field).
+        effective *= world.Stats.SlowFactor;
+
+        _phase += effective * (Speed / System.Math.Max(1f, HalfRange));
         float x = _origin.X + System.MathF.Sin(_phase) * HalfRange;
         t.Position.X = MathHelper.Clamp(x,
             world.PlayField.Left + t.Size.X * 0.5f,

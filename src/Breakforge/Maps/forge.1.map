@@ -1,0 +1,30 @@
+{
+  "id": "forge.1",
+  "displayName": "The Anvil",
+  "order": 1,
+  "map": {
+    "id": "map.forge",
+    "displayName": "The Forge",
+    "subtitle": "Hidden — drops from purple bricks",
+    "lockedByDefault": true
+  },
+  "legend": {
+    "B": "basic.blue",
+    "G": "basic.green",
+    "P": "basic.purple",
+    "A": "chain.amber",
+    "M": "mover.cyan",
+    "X": "bomb.red",
+    "#": "wall.gray",
+    ".": ""
+  },
+  "backgroundColor": [28, 18, 12],
+  "rows": [
+    "##########",
+    "#XPPPPPPX#",
+    "#PAAAAAAP#",
+    "#PA.MM.AP#",
+    "#PAAAAAAP#",
+    "#XPPPPPPX#"
+  ]
+}

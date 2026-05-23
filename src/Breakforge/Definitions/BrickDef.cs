@@ -15,6 +15,7 @@ public sealed class BrickDef
     public required string Id { get; init; }
     public required string DisplayName { get; init; }
     public int Hp { get; init; } = 1;
+    public int Armor { get; init; }                  // soaked off each hit (modulated by ArmorPen)
     public int ScoreValue { get; init; } = 10;
     public Color Color { get; init; } = Color.SteelBlue;
     public Color? OutlineColor { get; init; }
@@ -22,6 +23,8 @@ public sealed class BrickDef
     public float PowerupDropChance { get; init; } = 0.0f;
     public List<string>? PowerupPool { get; init; }  // ids of PowerupDef to pick from
     public bool Indestructible { get; init; }
+    /// <summary>Tag used by skills like "+30% damage vs Armored". Free-form.</summary>
+    public string? BrickType { get; init; }
 
     /// <summary>
     /// Behaviors to attach. Factory pattern so each brick instance gets its
