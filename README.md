@@ -66,9 +66,10 @@ engine.
 | `Behaviors/`     | Pluggable per-entity logic (paddle input, ball split, brick mover…).  |
 | `Effects/`       | Time-bound modifiers applied by powerups (wider paddle, bigger ball). |
 | `Definitions/`   | Data classes: `BrickDef`, `PowerupDef`, `LevelDef`, `MapDef`, `SkillNode`. |
-| `Content/`       | Built-in catalogs that register defs into the `Registry`.             |
-| `Gameplay/`      | `Spawning` — factory functions that build the standard entities.      |
-| `Player/`        | `PlayerProfile`, `Inventory`, `SkillTreeState`.                       |
+| `Content/`       | Built-in catalogs that register defs into the `Registry`. `MapCatalog` loads from JSON. |
+| `Maps/`          | One JSON `.map` file per level, embedded as a resource at build time. |
+| `Gameplay/`      | `Spawning` factory + `DamageResolver` pipeline.                       |
+| `Player/`        | `PlayerProfile`, `Inventory`, `SkillTreeState`, `ProfileStorage`.     |
 | `Scenes/`        | Menu, MapSelect, SkillTree, Inventory, Play.                          |
 
 ### The five core concepts
@@ -94,8 +95,16 @@ engine.
 
 5. **Registry + Definitions.** All content (bricks, powerups, levels, maps,
    skill nodes) is described by POCO definitions in `Definitions/`. Catalogs
-   in `Content/` register them at startup. Switch to JSON / YAML later by
-   replacing the catalogs — gameplay code reads only the `Registry`.
+   in `Content/` register them at startup. Levels live as JSON files under
+   `Maps/` and are embedded at build time; gameplay code reads only the
+   `Registry`.
+
+6. **PlayerStats + DamageResolver.** Every skill-driven modifier (crit, armor
+   pen, elements, knockback, drop rates, regen…) flows into a single
+   `PlayerStats` object held on the `World`. The `DamageResolver` is the
+   single place where a brick hit is turned into damage + side effects.
+   Adding a new skill is "set a `PlayerStats` field" rather than "patch the
+   collision system."
 
 ---
 
@@ -149,34 +158,57 @@ public sealed class MyEffect : Effect {
 
 ### Add a new level
 
-Append to `Content/MapCatalog.cs` with a layout of single-char codes:
+Drop a JSON file into `src/Breakforge/Maps/`. The csproj globs `Maps/*.map`
+as embedded resources, so no code edits are needed — the loader picks it
+up on next build.
 
-```csharp
-r.Register(new LevelDef {
-    Id      = "cascade.2",
-    Legend  = new() { ['B'] = "basic.blue", ['X'] = "bomb.red", ['.'] = "" },
-    Rows    = new List<string> {
-        "BBBBBBBBBB",
-        "B........B",
-        "B..XXXX..B",
-        "BBBBBBBBBB",
-    },
-});
+```jsonc
+// src/Breakforge/Maps/cascade.2.map
+{
+  "id": "cascade.2",
+  "displayName": "Aftershock",
+  "order": 2,
+  "map": {
+    "id": "map.cascade",
+    "displayName": "Cascade Halls",
+    "subtitle": "Chain reactions galore"
+  },
+  "legend": { "B": "basic.blue", "X": "bomb.red", ".": "" },
+  "rows": [
+    "BBBBBBBBBB",
+    "B........B",
+    "B..XXXX..B",
+    "BBBBBBBBBB"
+  ]
+}
 ```
+
+Files that share a `map.id` are grouped into one map; ordering is by
+`order` then by `id`. Optional fields: `backgroundColor`, `wallColor` (RGB
+arrays), `powerupDropMultiplier`, and on `map`: `lockedByDefault`,
+`completionReward`.
 
 ### Add a new map (and gate it behind a powerup)
 
-```csharp
-r.Register(new MapDef {
-    Id              = "map.crucible",
-    DisplayName     = "Crucible",
-    Subtitle        = "Late-game challenge",
-    LevelIds        = new() { "crucible.1", "crucible.2" },
-    LockedByDefault = true,
-});
+The map block lives inside any level file that belongs to it:
+
+```jsonc
+{
+  "id": "crucible.1",
+  "displayName": "Forge Heart",
+  "order": 1,
+  "map": {
+    "id": "map.crucible",
+    "displayName": "Crucible",
+    "subtitle": "Late-game challenge",
+    "lockedByDefault": true
+  },
+  "legend": { ... },
+  "rows": [ ... ]
+}
 ```
 
-Drop a powerup with `StoreInInventory = true` that calls
+Then drop a powerup with `StoreInInventory = true` that calls
 `profile.UnlockMap("map.crucible")` via its effect (see
 `MapUnlockEffect` in `PowerupCatalog.cs` for a working example).
 
@@ -189,13 +221,14 @@ r.Register(new SkillNode {
     Description   = "Start each level with two extra balls",
     Cost          = 2,
     Prerequisites = { "ball.spare" },
-    OnLevelStart  = ctx => ctx.BonusStartingBalls += 2,
+    OnLevelStart  = ctx => ctx.Stats.BonusStartingBalls += 2,
 });
 ```
 
-`RunContext` (`Definitions/SkillNode.cs`) is the surface for skills to mutate
-a new level — paddle width multiplier, ball speed multiplier, bonus balls,
-or arbitrary world tweaks via `ctx.World`.
+Skills mutate `ctx.Stats` (a `PlayerStats`) which is then read by the
+`DamageResolver` and various systems. Adding a brand-new stat usually means
+adding a field to `PlayerStats` plus one consumer site — no skill-by-skill
+plumbing.
 
 ### Add a new chain-reaction behavior
 
@@ -216,21 +249,53 @@ Attach it via `BrickDef.BehaviorFactories`.
 
 ## What's in the demo content
 
-- **Bricks** — basic (3 tiers), indestructible stone, bomb, resonant chain,
-  drifter (moving).
+- **Bricks** — basic (3 tiers, armor on tougher tiers), indestructible
+  stone, bomb, resonant chain, drifter (moving). Tagged by `BrickType` so
+  skills can target them.
 - **Powerups** — wider paddle, bigger ball, multiball, explosive balls,
   splitter, Forge map key.
-- **Maps** — Training Grounds (2 levels), Cascade Halls, The Forge (locked).
-- **Skills** — paddle width tiers, ball speed, spare ball, Forge scout
-  (unlock map), bargain hunter.
+- **Maps** — Training Grounds (2 levels), Cascade Halls, The Forge
+  (locked). Each level is a JSON file under `Maps/`.
+- **Skills** — a full ARPG-style tree across nine categories:
+  - *Paddle/Ball*: width tiers, paddle speed, ball speed up/down, spare ball.
+  - *Offense*: flat + % damage, crit chance/damage, armor pen, first
+    strike, ricochet, overkill.
+  - *Defense*: life steal, paddle shield, regen, last stand.
+  - *Element* (pick one): Fire (burn DoT), Ice (slow + chance to stun),
+    Chaos (random bonus damage).
+  - *Status*: stun chance, global slow, knockback.
+  - *Utility*: cooldown reduction, area-of-effect.
+  - *Economy*: gold per kill, gem drops.
+  - *Brick-type bonuses*: extra damage vs Tough / Hardened / Bomb bricks.
+  - *Map*: Forge scout (skill-tree map unlock).
 
 It's enough to demonstrate every extensibility seam. Add to taste.
 
 ---
 
+## Saves
+
+`PlayerProfile` (name, inventory, unlocked skills, unlocked maps, skill
+points, lifetime score) auto-saves to JSON. Mutations flip a dirty flag;
+`BreakforgeGame` debounces 1 second and flushes, plus a final flush on
+exit. Writes are atomic (temp file + replace) so a crash mid-write can't
+corrupt the save.
+
+File location:
+
+| Platform | Path                                              |
+|----------|---------------------------------------------------|
+| Windows  | `%AppData%\Breakforge\profile.json`               |
+| macOS    | `~/Library/Application Support/Breakforge/profile.json` |
+| Linux    | `~/.config/Breakforge/profile.json`               |
+
+Delete the file to reset. A corrupt or unreadable file is treated as
+"no save" — the game starts fresh rather than crashing.
+
+---
+
 ## Known limits / TODO
 
-- No save/load yet (`PlayerProfile` is in-memory). Add a JSON layer when ready.
 - Collision is O(balls × bricks) per frame. Switch to a coarse grid once you
   exceed a few hundred bricks.
 - No audio — there's no audio system wired up. MonoGame has SoundEffect /
